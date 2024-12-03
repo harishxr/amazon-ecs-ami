@@ -43,7 +43,8 @@ build {
   sources = [
     "source.amazon-ebs.al2023",
     "source.amazon-ebs.al2023arm",
-    "source.amazon-ebs.al2023neu"
+    "source.amazon-ebs.al2023neu",
+    "source.amazon-ebs.al2023gpu"
   ]
 
   provisioner "file" {
@@ -172,6 +173,13 @@ build {
     script              = "scripts/enable-ecs-agent-inferentia-support.sh"
   }
 
+  provisioner "shell" {
+  environment_vars = [
+    "AMI_TYPE=${source.name}",
+  ]
+  script = "scripts/enable-ecs-agent-gpu-support-al2023.sh"
+  }
+  
   provisioner "shell" {
     inline_shebang = "/bin/sh -ex"
     inline = [
