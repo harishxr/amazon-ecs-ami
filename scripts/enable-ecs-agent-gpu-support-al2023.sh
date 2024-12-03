@@ -18,7 +18,10 @@ sudo dnf install -y nvidia-driver \
     xorg-x11-server-Xorg \
     nvidia-container-toolkit
 
-sudo dnf install -y cuda 
+sudo dnf install -y cuda
+
+# Configure NVIDIA Container Toolkit runtime for Docker
+sudo nvidia-ctk runtime configure --runtime=docker
     
 # The Fabric Manager service needs to be started and enabled on EC2 P4d instances
 # in order to configure NVLinks and NVSwitches
