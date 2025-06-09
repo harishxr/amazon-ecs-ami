@@ -60,7 +60,7 @@ variable "block_device_size_gb" {
 variable "ecs_agent_version" {
   type        = string
   description = "ECS agent version to build AMI with."
-  default     = "1.90.0"
+  default     = "1.94.0"
 }
 
 variable "ecs_init_rev" {
@@ -72,37 +72,37 @@ variable "ecs_init_rev" {
 variable "docker_version" {
   type        = string
   description = "Docker version to build AMI with."
-  default     = "25.0.6"
+  default     = "25.0.8"
 }
 
 variable "containerd_version" {
   type        = string
   description = "Containerd version to build AMI with."
-  default     = "1.7.25"
+  default     = "1.7.27"
 }
 
 variable "runc_version" {
   type        = string
   description = "Runc version to build AMI with."
-  default     = "1.1.14"
+  default     = "1.2.4"
 }
 
 variable "docker_version_al2023" {
   type        = string
   description = "Docker version to build AL2023 AMI with."
-  default     = "25.0.6"
+  default     = "25.0.8"
 }
 
 variable "containerd_version_al2023" {
   type        = string
   description = "Containerd version to build AL2023 AMI with."
-  default     = "1.7.25"
+  default     = "1.7.27"
 }
 
 variable "runc_version_al2023" {
   type        = string
   description = "Runc version to build AL2023 AMI with."
-  default     = "1.1.14"
+  default     = "1.2.4"
 }
 
 variable "exec_ssm_version" {
@@ -225,18 +225,6 @@ variable "neu_instance_types" {
   type        = list(string)
   description = "List of available in-region instance types for NEU platform"
   default     = ["inf1.xlarge"]
-}
-
-variable "managed_daemon_base_url" {
-  type        = string
-  description = "Base URL (minus file name) to download managed daemons from."
-  default     = ""
-}
-
-variable "ebs_csi_driver_version" {
-  type        = string
-  description = "EBS CSI driver version to build AMI with."
-  default     = ""
 }
 
 variable "ami_ou_arns" {
