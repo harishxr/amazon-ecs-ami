@@ -5,6 +5,49 @@
 - [Amazon Linux 2 release notes](https://docs.aws.amazon.com/AL2/latest/relnotes/relnotes-al2.html)
 - [Amazon Linux AMI 2018.03 Release Notes](https://aws.amazon.com/amazon-linux-ami/2018.03-release-notes/)
 
+## 20250625
+- al2 ami version: 20250626
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20250623.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20250623.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20250623.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20250623.0-arm64-ebs
+- al2023 ami version: 20250626
+- source al2023 ami: al2023-ami-minimal-2023.7.20250623.1-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.7.20250623.1-kernel-6.1-arm64
+- distribution al2023 release: 2023.7.20250623
+- feature: add support for P6 instances [#467](https://github.com/aws/amazon-ecs-ami/pull/467)
+
+## 20250623
+- al2 ami version: 20250623
+- al2023 ami version: 20250623
+- enhancement: Update amazon-ssm-agent version for exec to 3.3.2299.0 [#465](https://github.com/aws/amazon-ecs-ami/pull/465)
+
+## 20250618
+- ecs version: 1.95.0
+
+## 20250613
+- al2 ami version: 20250613
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20250610.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20250610.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20250610.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20250610.0-arm64-ebs
+- al2023 ami version: 20250613
+- source al2023 ami: al2023-ami-minimal-2023.7.20250609.0-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.7.20250609.0-kernel-6.1-arm64
+- distribution al2023 release: 2023.7.20250609
+
+## 20250610
+- al2 ami version: 20250610
+- source al2 ami: amzn2-ami-minimal-hvm-2.0.20250605.0-x86_64-ebs
+- source al2 arm ami: amzn2-ami-minimal-hvm-2.0.20250605.0-arm64-ebs
+- source al2 kernel 5.10 ami: amzn2-ami-minimal-hvm-2.0.20250605.0-x86_64-ebs
+- source al2 kernel 5.10 arm ami: amzn2-ami-minimal-hvm-2.0.20250605.0-arm64-ebs
+- al2023 ami version: 20250610
+- source al2023 ami: al2023-ami-minimal-2023.7.20250527.1-kernel-6.1-x86_64
+- source al2023 arm ami: al2023-ami-minimal-2023.7.20250527.1-kernel-6.1-arm64
+- distribution al2023 release: 2023.7.20250527
+- bug fix: Unpinning AL2 kernel5dot10 version from 5.10.235* [#446](https://github.com/aws/amazon-ecs-ami/pull/446)
+
 ## 20250523
 - ecs version: 1.94.0
 - al2 ami version: 20250523
