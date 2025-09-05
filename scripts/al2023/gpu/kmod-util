@@ -1,0 +1,405 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+# Enable nullglob to handle empty glob patterns safely
+shopt -s nullglob
+
+# dkms may not be on the PATH. Discover the path from known paths
+DKMS=""
+for path in /usr/bin/dkms /usr/sbin/dkms; do
+  if [ -x "$path" ]; then
+    DKMS=$path
+    break
+  fi
+done
+
+if [ -z "$DKMS" ]; then
+  echo >&2 "$(date '+%Y-%m-%dT%H:%M:%S%z')" "[kmod-util]" "ERROR: dkms not found"
+  exit 1
+fi
+
+DKMS_ARCHIVE_DIR=/var/lib/dkms-archive
+LOCK_FILE=/var/lock/kmod-util.lock
+CLEANUP_ENABLED=false
+
+function log() {
+  echo >&2 "$(date '+%Y-%m-%dT%H:%M:%S%z')" "[kmod-util]" "$@"
+}
+
+# Simple lock mechanism to prevent concurrent operations
+function acquire_lock() {
+  local timeout=60
+  local count=0
+  
+  while [ $count -lt $timeout ]; do
+    if (set -C; echo $$ > "$LOCK_FILE") 2>/dev/null; then
+      return 0
+    fi
+    sleep 1
+    count=$((count + 1))
+  done
+  
+  log "ERROR: Failed to acquire lock after $timeout seconds"
+  return 1
+}
+
+function release_lock() {
+  rm -f "$LOCK_FILE"
+}
+
+# Cleanup on exit
+trap 'release_lock' EXIT
+
+# Validate module name for GPU driver operations
+function validate_module_name() {
+  local module_name="$1"
+  local valid_modules=("nvidia" "nvidia-open" "nvidia-open-grid")
+  
+  for valid_module in "${valid_modules[@]}"; do
+    if [ "$module_name" = "$valid_module" ]; then
+      return 0
+    fi
+  done
+  
+  log "ERROR: Invalid module name '$module_name'. Valid modules are: ${valid_modules[*]}"
+  return 1
+}
+
+# Check if any GPU driver module is already installed
+function check_existing_gpu_module() {
+  local target_module="$1"
+  local valid_modules=("nvidia" "nvidia-open" "nvidia-open-grid")
+  
+  for module in "${valid_modules[@]}"; do
+    if [ "$module" != "$target_module" ]; then
+      # Check if this other module is installed via DKMS
+      if ${DKMS} status -m "$module" 2>/dev/null | grep -q "installed"; then
+        log "ERROR: GPU driver module '$module' is already installed."
+        log "Please remove '$module' before loading '$target_module'."
+        log "Use: $0 remove $module"
+        return 1
+      fi
+    fi
+  done
+  
+  return 0
+}
+
+# Post-operation cleanup for service management
+function post_operation_cleanup() {
+  local operation="$1"
+  local module_name="$2"
+  
+  # Skip cleanup unless --cleanup flag was provided
+  if [[ "$CLEANUP_ENABLED" != "true" ]]; then
+    log "Skipping post-operation cleanup (use --cleanup flag to enable)"
+    return 0
+  fi
+  
+  log "Performing post-operation cleanup for $operation on $module_name..."
+  
+  case "$operation" in
+    "remove")
+      # Stop dependent services in reverse order
+      systemctl stop nvidia-fabricmanager 2>/dev/null || true
+      systemctl stop nvidia-persistenced 2>/dev/null || true
+      
+      # Unload any loaded NVIDIA kernel modules
+      log "Unloading NVIDIA kernel modules..."
+      for module in nvidia_uvm nvidia_drm nvidia_modeset nvidia; do
+        if lsmod | grep -q "^$module "; then
+          rmmod "$module" 2>/dev/null || log "Warning: Could not unload $module"
+        fi
+      done
+      
+      # Clean up device nodes
+      rm -f /dev/nvidia* /dev/nvidiactl /dev/nvidia-modeset /dev/nvidia-uvm* 2>/dev/null || true
+      
+      # Clear any cached driver state
+      rm -f /var/lib/nvidia-persistenced/socket 2>/dev/null || true
+      rm -f /tmp/.X*-lock 2>/dev/null || true
+      
+      # Force udev to remove stale rules
+      udevadm control --reload-rules
+      udevadm trigger --action=remove --subsystem-match=pci --attr-match=vendor=0x10de
+      udevadm settle
+      
+      log "Stopped GPU services, unloaded modules, and cleaned device nodes"
+      ;;
+    "load")
+      # Clear any previous state first
+      rm -f /var/lib/nvidia-persistenced/socket 2>/dev/null || true
+      
+      # Trigger device detection
+      udevadm control --reload-rules
+      udevadm trigger --subsystem-match=pci --attr-match=vendor=0x10de
+      udevadm settle
+      
+      # Give the system time to initialize the new driver
+      sleep 2
+      
+      # Start services in dependency order
+      if lsmod | grep -q nvidia; then
+        systemctl start nvidia-persistenced 2>/dev/null || true
+        systemctl start nvidia-fabricmanager 2>/dev/null || true
+        log "Started NVIDIA services"
+      fi
+      
+      ;;
+  esac
+}
+
+# get the version of a registered kernel module using dkms status
+function module-version() {
+  local MODULE_NAME="${1}"
+  local status_output
+  status_output=$(${DKMS} status -m "${MODULE_NAME}" 2>/dev/null | head -n 1)
+  
+  if [ -z "$status_output" ]; then
+    log "ERROR: No DKMS status found for module: ${MODULE_NAME}"
+    return 1
+  fi
+  
+  # Parse version from dkms status output (format: module/version, kernel, arch: status)
+  echo "$status_output" | cut -d',' -f1 | cut -d'/' -f2
+}
+
+# load a kernel module from the archives
+function load() {
+  local MODULE_NAME="${1}"
+  acquire_lock || return 1
+  
+  # Check if any other GPU driver module is already installed
+  if ! check_existing_gpu_module "${MODULE_NAME}"; then
+    return 1
+  fi
+  
+  log "unpacking: ${MODULE_NAME}"
+  local MODULE_ARCHIVE="${DKMS_ARCHIVE_DIR}/${MODULE_NAME}/*.tar.gz"
+  local archives=($MODULE_ARCHIVE)
+  
+  if [ ${#archives[@]} -eq 0 ]; then
+    log "ERROR: No archive found for ${MODULE_NAME}"
+    return 1
+  fi
+  
+  ${DKMS} ldtarball "${archives[0]}"
+  log "unpacked: ${MODULE_NAME}"
+  log "installing: ${MODULE_NAME}"
+  local MODULE_VERSION
+  MODULE_VERSION=$(module-version "${MODULE_NAME}")
+  ${DKMS} install -m "${MODULE_NAME}" -v "${MODULE_VERSION}"
+  log "installed: ${MODULE_NAME}"
+  
+  # Perform post-operation cleanup
+  post_operation_cleanup "load" "${MODULE_NAME}"
+}
+
+# remove a kernel module
+function remove() {
+  local MODULE_NAME="${1}"
+  acquire_lock || return 1
+  
+  # Perform pre-removal cleanup
+  post_operation_cleanup "remove" "${MODULE_NAME}"
+  
+  log "removing: ${MODULE_NAME}"
+  local MODULE_VERSION
+  MODULE_VERSION=$(module-version "${MODULE_NAME}")
+  ${DKMS} remove -m "${MODULE_NAME}" -v "${MODULE_VERSION}" --all
+  log "removed: ${MODULE_NAME}"
+}
+
+# archive a kernel module
+function archive() {
+  local MODULE_NAME="${1}"
+  acquire_lock || return 1
+  
+  log "archiving: ${MODULE_NAME}"
+  mkdir -p "${DKMS_ARCHIVE_DIR}/${MODULE_NAME}"
+  local MODULE_VERSION
+  MODULE_VERSION=$(module-version "${MODULE_NAME}")
+  ${DKMS} mktarball -m "${MODULE_NAME}" -v "${MODULE_VERSION}"
+  cp /var/lib/dkms/${MODULE_NAME}/${MODULE_VERSION}/tarball/*.tar.gz "${DKMS_ARCHIVE_DIR}/${MODULE_NAME}/"
+  log "archived: ${MODULE_NAME}"
+}
+
+# build a kernel module
+function build() {
+  local MODULE_NAME="${1}"
+  acquire_lock || return 1
+  
+  local MODULE_VERSION
+  MODULE_VERSION=$(module-version "${MODULE_NAME}")
+  ${DKMS} build -m "${MODULE_NAME}" -v "${MODULE_VERSION}"
+}
+
+# show status of a module
+function status() {
+  local MODULE_NAME="${1}"
+  
+  log "Status for module: ${MODULE_NAME}"
+  
+  # Use dkms status to check if module is registered and get detailed info
+  local dkms_status
+  dkms_status=$(${DKMS} status -m "${MODULE_NAME}" 2>/dev/null || echo "")
+  
+  if [ -n "$dkms_status" ]; then
+    echo "  DKMS Status:"
+    echo "$dkms_status" | sed 's/^/    /'
+  else
+    echo "  Installed: No"
+  fi
+  
+  # Check if archived
+  local archives=("${DKMS_ARCHIVE_DIR}/${MODULE_NAME}"/*.tar.gz)
+  if [ ${#archives[@]} -gt 0 ] && [ -f "${archives[0]}" ]; then
+    echo "  Archived: Yes"
+  else
+    echo "  Archived: No"
+  fi
+}
+
+# list all installed and archived modules
+function list() {
+  log "Installed DKMS modules:"
+  
+  # Get all DKMS modules using dkms status
+  local dkms_output
+  dkms_output=$(${DKMS} status 2>/dev/null || echo "")
+  
+  if [ -n "$dkms_output" ]; then
+    echo "$dkms_output" | sed 's/^/  /'
+  else
+    echo "  No DKMS modules found"
+  fi
+  
+  echo
+  log "Archived modules:"
+  
+  if [ -d "$DKMS_ARCHIVE_DIR" ]; then
+    local found_archives=false
+    for archive_dir in "$DKMS_ARCHIVE_DIR"/*; do
+      if [ -d "$archive_dir" ]; then
+        local module_name
+        module_name=$(basename "$archive_dir")
+        local archives=("$archive_dir"/*.tar.gz)
+        if [ ${#archives[@]} -gt 0 ] && [ -f "${archives[0]}" ]; then
+          echo "  $module_name (archived)"
+          found_archives=true
+        fi
+      fi
+    done
+    
+    if [ "$found_archives" = false ]; then
+      echo "  No archived modules found"
+    fi
+  else
+    echo "  Archive directory not found: $DKMS_ARCHIVE_DIR"
+  fi
+}
+
+function usage() {
+  cat >&2 << EOF
+usage: $0 [--cleanup] COMMAND [MODULE_NAME]
+
+Kernel module utilities for dynamic GPU driver management.
+Supports load/remove/archive operations for DKMS modules.
+
+OPTIONS:
+  --cleanup            Enable post-operation cleanup (service management)
+
+COMMANDS:
+  load MODULE_NAME     Load a kernel module from archives
+  remove MODULE_NAME   Remove an installed kernel module  
+  archive MODULE_NAME  Archive an installed kernel module
+  build MODULE_NAME    Build a kernel module
+  status MODULE_NAME   Show detailed status of a module
+  list                 List all installed and archived modules
+
+EXAMPLES:
+  $0 load nvidia                    # Load nvidia module (no cleanup)
+  $0 --cleanup load nvidia         # Load nvidia module with service restart
+  $0 remove nvidia                 # Remove nvidia module (no cleanup)
+  $0 --cleanup remove nvidia       # Remove nvidia module with service stop
+  $0 archive nvidia                # Archive nvidia module for later use
+  $0 status nvidia                 # Check nvidia module status
+  $0 list                          # Show all modules
+
+NOTES:
+  - Operations are protected by file locking to prevent conflicts
+  - Archives are stored in $DKMS_ARCHIVE_DIR
+  - Use 'status' command to verify module state before operations
+  - By default, load/remove operations do NOT manage services (for automated use)
+  - Use --cleanup flag for manual operations that need service management
+  - With --cleanup: manages GPU services (nvidia-persistenced, nvidia-fabricmanager)
+  - With --cleanup: device nodes are automatically cleaned/recreated during operations
+  - Valid module names: nvidia, nvidia-open, nvidia-open-grid
+  - Only one GPU driver module can be loaded at a time - remove existing before loading new
+
+AUTOMATED SCRIPT USAGE:
+  $0 load nvidia       # Safe for automated scripts - no service disruption
+  $0 remove nvidia     # Safe for automated scripts - no service disruption
+
+MANUAL USAGE:
+  $0 --cleanup load nvidia    # Full service integration for manual operations
+  $0 --cleanup remove nvidia  # Full service integration for manual operations
+EOF
+}
+
+# Parse arguments
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --cleanup)
+      CLEANUP_ENABLED=true
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+# Set positional parameters from parsed arguments
+set -- "${ARGS[@]}"
+
+# Handle different argument requirements
+if [ "$#" -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+COMMAND="$1"
+
+case "$COMMAND" in
+  load|remove|archive|build|status)
+    if [ "$#" -ne 2 ]; then
+      log "ERROR: Command '$COMMAND' requires a module name"
+      usage
+      exit 1
+    fi
+    
+    # Validate module name for GPU operations
+    if ! validate_module_name "$2"; then
+      exit 1
+    fi
+    
+    "${COMMAND}" "$2"
+    ;;
+  list)
+    if [ "$#" -ne 1 ]; then
+      log "ERROR: Command 'list' takes no arguments"
+      usage
+      exit 1
+    fi
+    list
+    ;;
+  *)
+    log "ERROR: Unknown command: $COMMAND"
+    usage
+    exit 1
+    ;;
+esac
