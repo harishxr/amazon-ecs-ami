@@ -175,6 +175,12 @@ build {
     script              = "scripts/enable-ecs-agent-inferentia-support.sh"
   }
 
+  provisioner "file" {
+    source      = "scripts/al2023/gpu/"
+    destination = "/tmp/gpu/"
+    only        = ["amazon-ebs.al2023gpu"]
+  }
+
   provisioner "shell" {
     environment_vars = [
       "AMI_TYPE=${source.name}"

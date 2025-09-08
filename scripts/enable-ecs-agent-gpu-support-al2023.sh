@@ -6,42 +6,10 @@ if [[ $AMI_TYPE != "al2023"*"gpu" ]]; then
     exit 0
 fi
 
-### Install GPU Drivers and Required Packages
-# Install base requirements
-sudo dnf install -y dkms kernel-modules-extra-$(uname -r) kernel-devel-$(uname -r)
-
-# Enable DKMS service
-sudo systemctl enable --now dkms
-
-# nvidia-release creates an nvidia repo file at /etc/yum.repos.d/amazonlinux-nvidia.repo
-sudo dnf install -y nvidia-release
-
-# Install NVIDIA drivers and tools
-sudo dnf install -y nvidia-driver \
-    nvidia-fabric-manager \
-    pciutils \
-    xorg-x11-server-Xorg \
-    nvidia-container-toolkit \
-    oci-add-hooks
-
-### Package installation and setup to support P6 instances
-# Install base requirements
-sudo dnf install -y libibumad infiniband-diags nvlsm
-
-# Load the User Mode API driver for InfiniBand
-sudo modprobe ib_umad
-
-# Ensure the ib_umad module is loaded at boot
-echo ib_umad | sudo tee /etc/modules-load.d/ib_umad.conf
-
-### Configure NVIDIA Services
-# The Fabric Manager service needs to be started and enabled on EC2 P4d instances
-# in order to configure NVLinks and NVSwitches
-sudo systemctl enable nvidia-fabricmanager
-
-# NVIDIA Persistence Daemon needs to be started and enabled on P5 instances
-# to maintain persistent software state in the NVIDIA driver.
-sudo systemctl enable nvidia-persistenced
+### Install NVIDIA Drivers
+# Call the dedicated driver installation script from /tmp/gpu/
+# (kmod utilities are handled within the install script)
+bash "/tmp/gpu/install-nvidia-driver.sh"
 
 ### Configure ECS GPU Support
 mkdir -p /tmp/ecs
