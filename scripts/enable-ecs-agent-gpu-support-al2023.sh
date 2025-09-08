@@ -9,7 +9,7 @@ fi
 ### Install NVIDIA Drivers
 # Call the dedicated driver installation script from /tmp/gpu/
 # (kmod utilities are handled within the install script)
-bash "/tmp/gpu/install-nvidia-driver.sh"
+bash "/tmp/install-nvidia-driver.sh"
 
 ### Configure ECS GPU Support
 mkdir -p /tmp/ecs
