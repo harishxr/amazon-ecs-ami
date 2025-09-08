@@ -9,10 +9,10 @@ fi
 ### Install GPU Drivers and Required Packages
 # Set executable permissions and move kernel module utilities to /usr/bin
 # (kmod utilities are copied to /tmp/gpu by Packer)
-sudo chmod +x "/tmp/gpu/kmod-util"
-sudo chmod +x "/tmp/gpu/kmod-util-simple"
-sudo mv "/tmp/gpu/kmod-util" /usr/bin/
-sudo mv "/tmp/gpu/kmod-util-simple" /usr/bin/
+sudo chmod +x "/tmp/kmod-util"
+sudo chmod +x "/tmp/kmod-util-simple"
+sudo mv "/tmp/kmod-util" /usr/bin/
+sudo mv "/tmp/kmod-util-simple" /usr/bin/
 
 # Clean DNF cache thoroughly
 sudo dnf clean all

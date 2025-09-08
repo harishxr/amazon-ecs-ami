@@ -177,7 +177,7 @@ build {
 
   provisioner "file" {
     source      = "scripts/al2023/gpu/"
-    destination = "/tmp/gpu/"
+    destination = "/tmp"
     only        = ["amazon-ebs.al2023gpu"]
   }
 
