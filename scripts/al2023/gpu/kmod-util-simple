@@ -31,6 +31,7 @@ function acquire_lock() {
   local timeout=60
   local count=0
   
+  
   while [ $count -lt $timeout ]; do
     if (set -C; echo $$ > "$LOCK_FILE") 2>/dev/null; then
       return 0
@@ -62,7 +63,8 @@ function module-version() {
   fi
   
   # Parse version from dkms status output (format: module/version, kernel, arch: status)
-  echo "$status_output" | cut -d',' -f1 | cut -d'/' -f2
+  # Extract just the version part, removing any status like ": added", ": built", etc.
+  echo "$status_output" | cut -d',' -f1 | cut -d'/' -f2 | cut -d':' -f1 | xargs
 }
 
 # load a kernel module from the archives
@@ -131,16 +133,18 @@ usage: $0 COMMAND MODULE_NAME
 Simple kernel module utilities for GPU driver management.
 
 COMMANDS:
-  load MODULE_NAME     Load a kernel module from archives
-  remove MODULE_NAME   Remove an installed kernel module  
-  archive MODULE_NAME  Archive an installed kernel module
-  build MODULE_NAME    Build a kernel module
+  load MODULE_NAME        Load a kernel module from archives
+  remove MODULE_NAME      Remove an installed kernel module  
+  archive MODULE_NAME     Archive an installed kernel module
+  build MODULE_NAME       Build a kernel module
+  module-version MODULE_NAME  Get the version of a registered kernel module
 
 EXAMPLES:
   $0 load nvidia
   $0 remove nvidia
   $0 archive nvidia
   $0 build nvidia
+  $0 module-version nvidia
 
 NOTES:
   - Operations are protected by file locking to prevent conflicts
@@ -157,7 +161,7 @@ fi
 COMMAND="$1"
 
 case "$COMMAND" in
-  load|remove|archive|build)
+  load|remove|archive|build|module-version)
     if [ "$#" -ne 2 ]; then
       log "ERROR: Command '$COMMAND' requires a module name"
       usage
