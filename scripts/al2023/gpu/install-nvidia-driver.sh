@@ -14,6 +14,31 @@ sudo chmod +x "/tmp/kmod-util-simple"
 sudo mv "/tmp/kmod-util" /usr/bin/
 sudo mv "/tmp/kmod-util-simple" /usr/bin/
 
+# Configure DKMS for parallel compilation to reduce NVIDIA driver build time
+# This optimization enables multi-threaded compilation using all available CPU cores,
+sudo mkdir -p /etc/dkms
+echo "MAKE[0]=\"'make' -j$(grep -c processor /proc/cpuinfo) module\"" | sudo tee /etc/dkms/nvidia.conf
+
+# Install base requirements
+RUNNING_KERNEL=$(uname -r)
+sudo dnf install -y \
+  "kernel-devel-${RUNNING_KERNEL}" \
+  "kernel-headers-${RUNNING_KERNEL}" \
+  "kernel-modules-extra-${RUNNING_KERNEL}" \
+  "kernel-modules-extra-common-${RUNNING_KERNEL}" \
+  dkms \
+  dnf-plugins-core \
+  patch
+
+# Lock kernel version to prevent automatic updates that could break DKMS modules
+sudo dnf versionlock 'kernel*'
+
+# Enable DKMS service
+sudo systemctl enable --now dkms
+
+# nvidia-release creates an nvidia repo file at /etc/yum.repos.d/amazonlinux-nvidia.repo
+sudo dnf install -y nvidia-release
+
 function archive-open-kmod() {
   sudo dnf -y install "kmod-nvidia-open-dkms.*"
   
@@ -59,42 +84,18 @@ function archive-proprietary-kmod() {
   sudo rm -rf /usr/src/nvidia*
 }
 
-# Configure DKMS for parallel compilation to reduce NVIDIA driver build time
-# This optimization enables multi-threaded compilation using all available CPU cores,
-sudo mkdir -p /etc/dkms
-echo "MAKE[0]=\"'make' -j$(grep -c processor /proc/cpuinfo) module\"" | sudo tee /etc/dkms/nvidia.conf
-
-# Install base requirements
-RUNNING_KERNEL=$(uname -r)
-sudo dnf install -y \
-  "kernel-devel-${RUNNING_KERNEL}" \
-  "kernel-headers-${RUNNING_KERNEL}" \
-  "kernel-modules-extra-${RUNNING_KERNEL}" \
-  "kernel-modules-extra-common-${RUNNING_KERNEL}" \
-  dkms \
-  patch
-
-# Lock kernel version to prevent automatic updates that could break DKMS modules
-sudo dnf versionlock 'kernel*'
-
-# Enable DKMS service
-sudo systemctl enable --now dkms
-
-# nvidia-release creates an nvidia repo file at /etc/yum.repos.d/amazonlinux-nvidia.repo
-sudo dnf install -y nvidia-release
-
-# Install NVIDIA drivers and tools
-sudo dnf install -y nvidia-driver \
-    nvidia-fabric-manager \
-    pciutils \
-    xorg-x11-server-Xorg \
-    nvidia-container-toolkit \
-    oci-add-hooks
-
 # Archive kernel modules for dynamic driver selection
 archive-open-kmod
 archive-grid-kmod
 archive-proprietary-kmod
+
+# Install NVIDIA drivers and tools
+sudo dnf install -y 
+nvidia-fabric-manager \
+    pciutils \
+    xorg-x11-server-Xorg \
+    nvidia-container-toolkit \
+    oci-add-hooks
 
 ### Package installation and setup to support P6 instances
 sudo dnf install -y libibumad infiniband-diags nvlsm
