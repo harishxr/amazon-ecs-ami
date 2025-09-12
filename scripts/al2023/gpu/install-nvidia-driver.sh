@@ -37,8 +37,16 @@ sudo systemctl enable --now dkms
 # nvidia-release creates an nvidia repo file at /etc/yum.repos.d/amazonlinux-nvidia.repo
 sudo dnf install -y nvidia-release
 
+function archive-proprietary-kmod() {
+  sudo dnf -y install kmod-nvidia-latest-dkms
+  sudo kmod-util archive nvidia
+  sudo kmod-util remove nvidia
+  sudo rm -rf /usr/src/nvidia*
+  sudo dnf -y remove --all "kmod-nvidia-latest-dkms*"
+}
+
 function archive-open-kmod() {
-  sudo dnf -y install "kmod-nvidia-open-dkms"
+  sudo dnf -y install kmod-nvidia-open-dkms
   
   NVIDIA_OPEN_VERSION=$(kmod-util module-version nvidia)
   sudo dkms remove "nvidia/$NVIDIA_OPEN_VERSION" --all
@@ -58,8 +66,6 @@ function archive-open-kmod() {
   sudo mv "/tmp/${SUPPORTED_DEVICE_FILE}" /etc/ecs/
 
   sudo kmod-util remove nvidia-open
-
-  sudo dnf -y remove --all "kmod-nvidia-open*"
 }
 
 function archive-grid-kmod() {
@@ -79,20 +85,13 @@ function archive-grid-kmod() {
   sudo rm -rf /usr/src/nvidia-open-grid*
 }
 
-function archive-proprietary-kmod() {
-  sudo dnf -y install "kmod-nvidia-latest-dkms.*"
-  sudo kmod-util archive nvidia
-  sudo kmod-util remove nvidia
-  sudo rm -rf /usr/src/nvidia*
-}
-
 # Archive kernel modules for dynamic driver selection
+archive-proprietary-kmod
 archive-open-kmod
 archive-grid-kmod
-archive-proprietary-kmod
 
 # Install NVIDIA drivers and tools
-sudo dnf install -y nvidia-driver \
+sudo dnf install -y nvidia-open \
     nvidia-fabric-manager \
     pciutils \
     xorg-x11-server-Xorg \

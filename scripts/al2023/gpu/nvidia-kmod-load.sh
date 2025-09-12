@@ -23,7 +23,7 @@ readonly NVIDIA_GRID_SUBDEVICES=(
 # Return the path of the file containing devices supported by the nvidia-open kmod
 nvidia-open-supported-devices-file() {
   local kmod_major_version
-  kmod_major_version=$(rpmquery kmod-nvidia-latest-dkms --queryformat '%{VERSION}' | cut -d. -f1)
+  kmod_major_version=$(rpmquery kmod-nvidia-open-dkms --queryformat '%{VERSION}' | cut -d. -f1)
   local supported_device_file="/etc/ecs/nvidia-open-supported-devices-${kmod_major_version}.txt"
   
   if [[ ! -f "${supported_device_file}" ]]; then
