@@ -15,7 +15,7 @@ sudo mv "/tmp/kmod-util" /usr/bin/
 # Configure DKMS for parallel compilation to reduce NVIDIA driver build time
 # This optimization enables multi-threaded compilation using all available CPU cores,
 sudo mkdir -p /etc/dkms
-echo "MAKE[0]=\"'make' -j$(grep -c processor /proc/cpuinfo) module\"" | sudo tee /etc/dkms/nvidia.conf
+echo "MAKE[0]=\"'make' -j$(grep -c processor /proc/cpuinfo) modules\"" | sudo tee /etc/dkms/nvidia.conf
 
 # Install base requirements
 RUNNING_KERNEL=$(uname -r)
@@ -38,34 +38,33 @@ sudo systemctl enable --now dkms
 sudo dnf install -y nvidia-release
 
 function archive-proprietary-kmod() {
-  sudo dnf -y install kmod-nvidia-latest-dkms
-  sudo kmod-util archive nvidia
-  sudo kmod-util remove nvidia
-  sudo rm -rf /usr/src/nvidia*
+  sudo dnf -y install "kmod-nvidia-latest-dkms"
+  
+  NVIDIA_PROPRIETARY_VERSION=$(kmod-util module-version nvidia)
+  sudo dkms remove "nvidia/$NVIDIA_PROPRIETARY_VERSION" --all
+  sudo sed -i 's/PACKAGE_NAME="nvidia"/PACKAGE_NAME="nvidia-proprietary"/' /usr/src/nvidia-$NVIDIA_PROPRIETARY_VERSION/dkms.conf
+  sudo mv /usr/src/nvidia-$NVIDIA_PROPRIETARY_VERSION /usr/src/nvidia-proprietary-$NVIDIA_PROPRIETARY_VERSION
+  sudo dkms add -m nvidia-proprietary -v $NVIDIA_PROPRIETARY_VERSION
+  sudo dkms build -m nvidia-proprietary -v $NVIDIA_PROPRIETARY_VERSION
+  sudo dkms install -m nvidia-proprietary -v $NVIDIA_PROPRIETARY_VERSION
+
+  sudo kmod-util archive nvidia-proprietary
+  sudo kmod-util remove nvidia-proprietary
+  sudo rm -rf /usr/src/nvidia-proprietary*
   sudo dnf -y remove --all "kmod-nvidia-latest-dkms*"
 }
 
 function archive-open-kmod() {
-  sudo dnf -y install kmod-nvidia-open-dkms
+  sudo dnf -y install "kmod-nvidia-open-dkms"
   
   NVIDIA_OPEN_VERSION=$(kmod-util module-version nvidia)
-  sudo dkms remove "nvidia/$NVIDIA_OPEN_VERSION" --all
-  sudo sed -i 's/PACKAGE_NAME="nvidia"/PACKAGE_NAME="nvidia-open"/' /usr/src/nvidia-$NVIDIA_OPEN_VERSION/dkms.conf
-  sudo mv /usr/src/nvidia-$NVIDIA_OPEN_VERSION /usr/src/nvidia-open-$NVIDIA_OPEN_VERSION
-  sudo dkms add -m nvidia-open -v $NVIDIA_OPEN_VERSION
-  sudo dkms build -m nvidia-open -v $NVIDIA_OPEN_VERSION
-  sudo dkms install -m nvidia-open -v $NVIDIA_OPEN_VERSION
+  sudo kmod-util archive nvidia
 
-  sudo kmod-util archive nvidia-open
+  # Copy the source files to a new directory for GRID driver installation
+  sudo mkdir /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION
+  sudo cp -R /usr/src/nvidia-$NVIDIA_OPEN_VERSION/* /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION
 
-  sudo mkdir /usr/src/nvidia-open-grid-$NVIDIA_OPEN_VERSION
-  sudo cp -R /usr/src/nvidia-open-$NVIDIA_OPEN_VERSION/* /usr/src/nvidia-open-grid-$NVIDIA_OPEN_VERSION
-
-  KMOD_MAJOR_VERSION=$(sudo kmod-util module-version nvidia-open | cut -d. -f1)
-  SUPPORTED_DEVICE_FILE="nvidia-open-supported-devices-${KMOD_MAJOR_VERSION}.txt"
-  sudo mv "/tmp/${SUPPORTED_DEVICE_FILE}" /etc/ecs/
-
-  sudo kmod-util remove nvidia-open
+  sudo kmod-util remove nvidia
 }
 
 function archive-grid-kmod() {
@@ -74,15 +73,15 @@ function archive-grid-kmod() {
   if [ "$MACHINE" != "x86_64" ]; then
     return
   fi
-  NVIDIA_OPEN_VERSION=$(ls -d /usr/src/nvidia-open-grid-* | sed 's/.*nvidia-open-grid-//')
-  sudo sed -i 's/PACKAGE_NAME="nvidia-open"/PACKAGE_NAME="nvidia-open-grid"/g' /usr/src/nvidia-open-grid-$NVIDIA_OPEN_VERSION/dkms.conf
-  sudo sed -i "s/MAKE\[0\]=\"'make'/MAKE\[0\]=\"'make' GRID_BUILD=1 GRID_BUILD_CSP=1 /g" /usr/src/nvidia-open-grid-$NVIDIA_OPEN_VERSION/dkms.conf
-  sudo dkms build -m nvidia-open-grid -v $NVIDIA_OPEN_VERSION
-  sudo dkms install nvidia-open-grid/$NVIDIA_OPEN_VERSION
+  NVIDIA_OPEN_VERSION=$(ls -d /usr/src/nvidia-grid-* | sed 's/.*nvidia-grid-//')
+  sudo sed -i 's/PACKAGE_NAME="nvidia"/PACKAGE_NAME="nvidia-grid"/g' /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION/dkms.conf
+  sudo sed -i "s/MAKE\[0\]=\"'make'/MAKE\[0\]=\"'make' GRID_BUILD=1 GRID_BUILD_CSP=1 /g" /usr/src/nvidia-grid-$NVIDIA_OPEN_VERSION/dkms.conf
+  sudo dkms build -m nvidia-grid -v $NVIDIA_OPEN_VERSION
+  sudo dkms install nvidia-grid/$NVIDIA_OPEN_VERSION
 
-  sudo kmod-util archive nvidia-open-grid
-  sudo kmod-util remove nvidia-open-grid
-  sudo rm -rf /usr/src/nvidia-open-grid*
+  sudo kmod-util archive nvidia-grid
+  sudo kmod-util remove nvidia-grid
+  sudo rm -rf /usr/src/nvidia-grid*
 }
 
 # Archive kernel modules for dynamic driver selection
@@ -91,12 +90,16 @@ archive-open-kmod
 archive-grid-kmod
 
 # Install NVIDIA drivers and tools
-sudo dnf install -y nvidia-open \
+sudo dnf install -y "nvidia-open" \
     nvidia-fabric-manager \
     pciutils \
     xorg-x11-server-Xorg \
     nvidia-container-toolkit \
     oci-add-hooks
+
+sudo dnf versionlock 'nvidia*'
+sudo dnf versionlock 'kmod*'
+sudo dnf versionlock 'libnvidia*'
 
 ### Package installation and setup to support P6 instances
 sudo dnf install -y libibumad infiniband-diags nvlsm
@@ -107,6 +110,7 @@ sudo modprobe ib_umad
 # Ensure the ib_umad module is loaded at boot
 echo ib_umad | sudo tee /etc/modules-load.d/ib_umad.conf
 
+sudo chmod +x /tmp/nvidia-kmod-load.sh
 sudo mv /tmp/nvidia-kmod-load.sh /etc/ecs/
 sudo mv /tmp/nvidia-kmod-load.service /etc/systemd/system/nvidia-kmod-load.service
 sudo systemctl daemon-reload
