@@ -50,7 +50,6 @@ function release_lock() {
 # Cleanup on exit
 trap 'release_lock' EXIT
 
-
 # Function to detect NVIDIA GPU devices
 function has-nvidia-device() {
   local NVIDIA_VENDOR_ID="10de"
@@ -135,7 +134,6 @@ function build() {
   MODULE_VERSION=$(module-version "${MODULE_NAME}")
   ${DKMS} build -m "${MODULE_NAME}" -v "${MODULE_VERSION}"
 }
-
 
 function usage() {
   cat >&2 << EOF
