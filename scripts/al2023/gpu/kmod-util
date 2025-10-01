@@ -19,7 +19,10 @@ if [ -z "$DKMS" ]; then
   exit 1
 fi
 
+# Custom directory for storing DKMS module archives
+# This path is used to store compressed kernel module tarballs that can be loaded on demand
 DKMS_ARCHIVE_DIR=/var/lib/dkms-archive
+
 LOCK_FILE=/var/lock/kmod-util.lock
 
 function log() {
@@ -47,12 +50,9 @@ function release_lock() {
   rm -f "$LOCK_FILE"
 }
 
-# Cleanup on exit
-trap 'release_lock' EXIT
-
 # Function to detect NVIDIA GPU devices
 function has-nvidia-device() {
-  local NVIDIA_VENDOR_ID="10de"
+  local NVIDIA_VENDOR_ID="10de"  # NVIDIA's PCI vendor ID
   local NVIDIA_DEVICES
   NVIDIA_DEVICES=$(lspci -d "${NVIDIA_VENDOR_ID}::" | wc -l)
   if [ ${NVIDIA_DEVICES} -gt 0 ]; then
@@ -162,35 +162,56 @@ NOTES:
 EOF
 }
 
-# Check for at least one argument
-if [ "$#" -eq 0 ]; then
-  usage
-  exit 1
-fi
-
-COMMAND="$1"
-
-case "$COMMAND" in
-  load|remove|archive|build|module-version)
-    if [ "$#" -ne 2 ]; then
-      log "ERROR: Command '$COMMAND' requires a module name"
-      usage
-      exit 1
-    fi
-    
-    "${COMMAND}" "$2"
-    ;;
-  has-nvidia-device)
-    if [ "$#" -ne 1 ]; then
-      log "ERROR: Command '$COMMAND' takes no arguments"
-      usage
-      exit 1
-    fi
-    "${COMMAND}"
-    ;;
-  *)
-    log "ERROR: Unknown command: $COMMAND"
+function parse_args() {
+  # Check for at least one argument
+  if [ "$#" -eq 0 ]; then
     usage
     exit 1
-    ;;
-esac
+  fi
+
+  COMMAND="$1"
+  MODULE_NAME="${2:-}"
+}
+
+function verify_args() {
+  case "$COMMAND" in
+    load|remove|archive|build|module-version)
+      if [ -z "$MODULE_NAME" ]; then
+        log "ERROR: Command '$COMMAND' requires a module name"
+        usage
+        exit 1
+      fi
+      ;;
+    has-nvidia-device)
+      if [ -n "$MODULE_NAME" ]; then
+        log "ERROR: Command '$COMMAND' takes no arguments"
+        usage
+        exit 1
+      fi
+      ;;
+    *)
+      log "ERROR: Unknown command: $COMMAND"
+      usage
+      exit 1
+      ;;
+  esac
+}
+
+function main() {
+  # Cleanup on exit
+  trap 'release_lock' EXIT
+
+  parse_args "$@"
+  verify_args
+
+  case "$COMMAND" in
+    load|remove|archive|build|module-version)
+      "${COMMAND}" "$MODULE_NAME"
+      ;;
+    has-nvidia-device)
+      "${COMMAND}"
+      ;;
+  esac
+}
+
+main "$@"
