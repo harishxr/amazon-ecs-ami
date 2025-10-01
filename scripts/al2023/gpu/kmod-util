@@ -26,7 +26,7 @@ function log() {
   echo >&2 "$(date '+%Y-%m-%dT%H:%M:%S%z')" "[kmod-util]" "$@"
 }
 
-# Simple lock mechanism to prevent concurrent operations
+# lock mechanism to prevent concurrent operations
 function acquire_lock() {
   local timeout=60
   local count=0
@@ -142,7 +142,7 @@ function usage() {
 usage: $0 COMMAND [MODULE_NAME]
 
 Kernel module utilities for dynamic GPU driver management.
-Supports load/remove/archive operations for DKMS modules.
+Supports load/remove/archive/build/module-version operations for DKMS modules.
 
 COMMANDS:
   load MODULE_NAME     Load a kernel module from archives
@@ -150,14 +150,13 @@ COMMANDS:
   archive MODULE_NAME  Archive an installed kernel module
   build MODULE_NAME    Build a kernel module
   module-version MODULE_NAME  Get the version of a registered kernel module
-  has-nvidia-device    Check if NVIDIA GPU devices are present
 
 EXAMPLES:
-  $0 load nvidia                   # Load nvidia module
+  $0 load nvidia                  # Load nvidia module
   $0 remove nvidia                # Remove nvidia module
   $0 archive nvidia               # Archive nvidia module for later use
-  $0 module-version nvidia         # Get nvidia module version
-  $0 has-nvidia-device            # Check for NVIDIA GPU hardware
+  $0 build nvidia                 # Build nvidia module
+  $0 module-version nvidia        # Get nvidia module version
 
 NOTES:
   - Operations are protected by file locking to prevent conflicts
@@ -165,8 +164,7 @@ NOTES:
 EOF
 }
 
-
-# Handle different argument requirements
+# Check for at least one argument
 if [ "$#" -eq 0 ]; then
   usage
   exit 1
