@@ -8,8 +8,7 @@ if ! kmod-util has-nvidia-device; then
   exit 0
 fi
 
-# Constants
-readonly NVIDIA_VENDOR_ID="10de"
+readonly NVIDIA_VENDOR_ID="10de" # NVIDIA's PCI vendor ID
 readonly NVIDIA_GRID_SUBDEVICES=(
   "27b8:1733" # L4:L4-3Q
   "27b8:1735" # L4:L4-6Q
@@ -53,12 +52,11 @@ main() {
   local module_name
   
   if device-supports-grid; then
-    module_name="nvidia-grid"
+    module_name="nvidia-grid" # Load grid kmod
   elif device-supports-proprietary; then
-    module_name="nvidia-proprietary"
+    module_name="nvidia-proprietary" # Load proprietary kmod
   else
-    # Fallback to open-source drivers for all other devices
-    module_name="nvidia"
+    module_name="nvidia" # Fallback to open-source kmod for all other devices
   fi
   
   echo "Loading NVIDIA kernel module: ${module_name}"
