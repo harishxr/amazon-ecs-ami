@@ -1,7 +1,5 @@
 [Unit]
 Description=Loading NVIDIA kernel modules
-# ECS doesn't need IMDS, so we can start earlier without network dependency
-After=local-fs.target
 Before=nvidia-fabricmanager.service nvidia-persistenced.service ecs.service
 
 [Service]
