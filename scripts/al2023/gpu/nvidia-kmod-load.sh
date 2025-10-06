@@ -19,12 +19,14 @@ readonly NVIDIA_PROPRIETARY_SUBDEVICES=(
   "13f2:113a" # G3 instances
 )
 
-# Check if any device supports proprietary drivers (P3 and G3 instances)
-device-supports-proprietary() {
-  local nvidia_proprietary_subdevice nvidia_subdevice
-  for nvidia_proprietary_subdevice in "${NVIDIA_PROPRIETARY_SUBDEVICES[@]}"; do
+# Helper function to check if any device matches a given array of subdevice IDs
+device-supports-module-type() {
+  local -n device_array=$1
+  local device nvidia_subdevice
+  
+  for device in "${device_array[@]}"; do
     while IFS= read -r nvidia_subdevice; do
-      if [[ "${nvidia_proprietary_subdevice}" == "${nvidia_subdevice}" ]]; then
+      if [[ "${device}" == "${nvidia_subdevice}" ]]; then
         return 0
       fi
     done < <(lspci -n -mm -d "${NVIDIA_VENDOR_ID}:" | awk '{print $4":"$7}' | tr -d '"')
@@ -33,18 +35,14 @@ device-supports-proprietary() {
   return 1
 }
 
+# Check if any device supports proprietary drivers (P3 and G3 instances)
+device-supports-proprietary() {
+  device-supports-module-type NVIDIA_PROPRIETARY_SUBDEVICES
+}
+
 # Check if any device supports GRID virtualization
 device-supports-grid() {
-  local nvidia_grid_subdevice nvidia_subdevice
-  for nvidia_grid_subdevice in "${NVIDIA_GRID_SUBDEVICES[@]}"; do
-    while IFS= read -r nvidia_subdevice; do
-      if [[ "${nvidia_grid_subdevice}" == "${nvidia_subdevice}" ]]; then
-        return 0
-      fi
-    done < <(lspci -n -mm -d "${NVIDIA_VENDOR_ID}:" | awk '{print $4":"$7}' | tr -d '"')
-  done
-  
-  return 1
+  device-supports-module-type NVIDIA_GRID_SUBDEVICES
 }
 
 # Determine and load the appropriate NVIDIA kernel module
