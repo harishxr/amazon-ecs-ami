@@ -31,7 +31,7 @@ jobs:
         fi
 
         # Check if there's any non-empty content (not just headers and whitespace)
-        content=$(echo "$changelog" | grep -v '^###' | grep -v '^[[:space:]]*$')
+        content=$(echo "$changelog" | grep -v '^###' | grep -v '^[[:space:]]*$' || true)
         if [ -z "$content" ]; then
           echo "❌ Changelog section is empty."
           echo "Please add a changelog entry with a category prefix."
