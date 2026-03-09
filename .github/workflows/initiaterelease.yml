@@ -2,138 +2,41 @@ name: InitiateRelease
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: 0 18 * * 1-5
 
 jobs:
-  GenerateConfig:
+  TestAppToken:
     runs-on: ubuntu-latest
-    outputs:
-      stage_exit_code: ${{ steps.stage.outputs.stage_exit_code }}
-      push_exit_code: ${{ steps.push.outputs.push_exit_code }}
-      pr_exit_code: ${{ steps.pr.outputs.pr_exit_code }}
     permissions:
-      id-token: write
       contents: write
       pull-requests: write
-    env:
-      IAM_INSTANCE_PROFILE_ARN: ${{ secrets.IAM_INSTANCE_PROFILE_ARN }}
     steps:
     - name: Checkout
       uses: actions/checkout@v6
+
     - name: Generate App Token
       id: app-token
       uses: actions/create-github-app-token@v2
       with:
         app-id: ${{ secrets.APP_ID }}
         private-key: ${{ secrets.APP_PRIVATE_KEY }}
-    - name: Create Release Branch
-      run: |
-        date=$(date '+%Y%m%d')
-        git checkout -b release-${date}
-    - name: Install xmllint
-      run: |
-        # generate-release-vars.sh depends on these packages
-        sudo apt-get update && sudo apt-get install libxml2-utils
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v6
-      with:
-        role-to-assume: ${{ secrets.AMI_GENERATE_CONFIG_ROLE }}
-        aws-region: us-west-2
-    - name: Configure Bot Alias
+
+    - name: Configure Git
       run: |
         git config --global user.name "GenerateConfig Action"
         git config --global user.email "gcaction@github.com"
         git remote set-url origin https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}
-    - name: Check AL2 Update
-      run: ./scripts/check-update.sh al2
-    - name: Check AL2023 Update
-      run: ./scripts/check-update.sh al2023
-    - name: Check for changes
-      id: stage
+
+    - name: Create branch with dummy commit and push
       run: |
-        # Git diff returns exit code of 1 when there is a change staged
-        # We need the set statements to prevent erroring out
-        set +e
-        git diff --cached --quiet
-        echo "stage_exit_code=$?" >> "$GITHUB_OUTPUT"
-        set -e
-    - name: Commit and Push Changes
-      id: push
-      if: ${{ steps.stage.outputs.stage_exit_code == 1 }}
-      run: |
-        date=$(date '+%Y%m%d')
-        git commit -m "Release ${date}"
-        git status
-        git push --set-upstream origin release-${date}
-        echo "push_exit_code=$?" >> "$GITHUB_OUTPUT"
-    - name: Open PR for Branch
-      id: pr
-      if: ${{ steps.stage.outputs.stage_exit_code == 1 && steps.push.outputs.push_exit_code == 0 }}
+        date=$(date '+%Y%m%d%H%M%S')
+        git checkout -b test-app-token-${date}
+        git commit --allow-empty -m "Test app token PR - ${date}"
+        git push --set-upstream origin test-app-token-${date}
+
+    - name: Open PR
       env:
         GH_TOKEN: ${{ steps.app-token.outputs.token }}
       run: |
-        date=$(date '+%Y%m%d')
-        gh pr create --base main --head release-${date} --title "Release ${date}" --body "Enhanced ECS Optimized AMI Release changes"
-        echo "pr_exit_code=$?" >> "$GITHUB_OUTPUT"
-  PushToCodeCommit:
-    needs: GenerateConfig
-    if: ${{ needs.GenerateConfig.outputs.stage_exit_code == 1 && needs.GenerateConfig.outputs.push_exit_code == 0 && needs.GenerateConfig.outputs.pr_exit_code == 0 }}
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v6
-      with:
-        role-to-assume: ${{secrets.AMI_MIRROR_ROLE}}
-        aws-region: us-west-2
-    - name: Delete shinkansen branch on codecommit repository
-      run: |
-        aws codecommit delete-branch --repository-name amazon-ecs-ami-mirror --branch-name shinkansen
-    - name: Sleeping for 60 seconds after CodeCommit branch deletion and before recreating it
-      run: |
-        sleep 60
-    - name: Configure prereqs
-      run: |
-        git config --global user.name "Github Action"
-        git config --global user.email "action@github.com"
-        pip install git-remote-codecommit
-    - name: Mirror to shinkansen branch on codecommit repository
-      run: |
-        date=$(date '+%Y%m%d')
-        git clone --single-branch --branch release-${date} https://github.com/aws/amazon-ecs-ami ecsAmiGithub
-        git clone codecommit::us-west-2://amazon-ecs-ami-mirror ecsAmiCodeCommit
-        cp ecsAmiCodeCommit/Config ecsAmiGithub/
-        cd ecsAmiGithub
-        git add Config
-        git commit -m "Release ${date}"
-        git remote add codecommit codecommit::us-west-2://amazon-ecs-ami-mirror
-        git push codecommit release-${date}:shinkansen
-  MetricPublish:
-    needs: [GenerateConfig, PushToCodeCommit]
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v6
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v6
-      with:
-        role-to-assume: ${{secrets.AMI_MIRROR_ROLE}}
-        aws-region: us-west-2
-    - name: Failure Scenario
-      if: ${{ needs.GenerateConfig.result == 'failure' || needs.PushToCodeCommit.result == 'failure' }}
-      run: aws cloudwatch put-metric-data --metric-name EcsAmiGithubActionStatus --namespace ECSAMIRelease --value "-1"
-    - name: Release Kickoff Scenario
-      if: ${{ needs.PushToCodeCommit.result == 'success'}}
-      run: aws cloudwatch put-metric-data --metric-name EcsAmiGithubActionStatus --namespace ECSAMIRelease --value 1
-    - name: No Release Scenario
-      if: ${{ needs.GenerateConfig.result == 'success' && needs.PushToCodeCommit.result == 'skipped' }}
-      run: aws cloudwatch put-metric-data --metric-name EcsAmiGithubActionStatus --namespace ECSAMIRelease --value 0
+        date=$(date '+%Y%m%d%H%M%S')
+        branch=$(git branch --show-current)
+        gh pr create --base main --head ${branch} --title "Test: App Token PR ${branch}" --body "Testing that PR checks trigger when using GitHub App token"
