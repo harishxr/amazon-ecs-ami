@@ -19,14 +19,13 @@ jobs:
           exit 0
         fi
 
-        # Check if PR body contains any of the required category keywords
-        # (outside of HTML comments)
-        body_no_comments=$(echo "$PR_BODY" | sed '/<!--/,/-->/d')
+        # Extract changelog section, strip HTML comments and headers
+        changelog=$(echo "$PR_BODY" | sed '/<!--/,/-->/d' | sed -n '/### Description for the changelog/,/### Licensing/p' | grep -v '^###' || true)
 
-        if echo "$body_no_comments" | grep -qiE '\b(feature|enhancement|bugfix|housekeeping)\b'; then
+        if echo "$changelog" | grep -qiE '\b(feature|enhancement|bugfix|housekeeping)\b'; then
           echo "Changelog validation passed"
         else
-          echo "PR description must include a changelog entry with a category: feature, enhancement, bugfix, or housekeeping"
+          echo "PR description must include a changelog entry in the 'Description for the changelog' section with a category: feature, enhancement, bugfix, or housekeeping"
           echo ""
           echo "Example: 'enhancement - Bump docker version to x.x.x'"
           exit 1
