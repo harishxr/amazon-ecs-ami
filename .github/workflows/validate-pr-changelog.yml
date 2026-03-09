@@ -22,22 +22,35 @@ jobs:
         # Extract text between "Description for the changelog" and "Licensing", strip HTML comments
         changelog=$(echo "$PR_BODY" | sed -n '/### Description for the changelog/,/### Licensing/p' | sed '/<!--/,/-->/d')
 
+        # Check if changelog section exists
         if [ -z "$changelog" ]; then
-          echo "::error::No 'Description for the changelog' section found in PR description."
+          echo "::error::Missing 'Description for the changelog' section. Please use the PR template and fill in the changelog section."
           exit 1
         fi
 
+        # Check if there's any non-empty content (not just headers and whitespace)
+        content=$(echo "$changelog" | grep -v '^###' | grep -v '^[[:space:]]*$')
+        if [ -z "$content" ]; then
+          echo "::error::Changelog section is empty. Please add a changelog entry with a category prefix."
+          echo "::error::Format: [category] - description"
+          echo "::error::Categories: feature, enhancement, bugfix, housekeeping"
+          exit 1
+        fi
+
+        # Check for required category keyword
         keywords=("feature" "enhancement" "bugfix" "housekeeping")
         found=false
         for keyword in "${keywords[@]}"; do
-          if echo "$changelog" | grep -qi "\b$keyword\b"; then
+          if echo "$content" | grep -qi "\b$keyword\b"; then
             echo "Found changelog category: $keyword"
             found=true
           fi
         done
 
         if [ "$found" = false ]; then
-          echo "::error::Changelog must contain a category keyword: feature, enhancement, bugfix, or housekeeping."
+          echo "::error::Changelog entry is missing a category prefix. Please update your PR description."
+          echo "::error::Format: [category] - description"
+          echo "::error::Valid categories: feature, enhancement, bugfix, housekeeping"
           echo "::error::Example: 'enhancement - Bump docker version to x.x.x'"
           exit 1
         fi
