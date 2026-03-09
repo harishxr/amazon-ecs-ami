@@ -15,7 +15,7 @@ jobs:
       run: |
         # Skip for bot PRs
         if [[ "$PR_AUTHOR" == "github-actions[bot]" || "$PR_AUTHOR" == "release-notes-testing[bot]" ]]; then
-          echo "✅ Bot PR — skipping changelog validation"
+          echo "Bot PR — skipping changelog validation"
           exit 0
         fi
 
@@ -24,9 +24,9 @@ jobs:
         body_no_comments=$(echo "$PR_BODY" | sed '/<!--/,/-->/d')
 
         if echo "$body_no_comments" | grep -qiE '\b(feature|enhancement|bugfix|housekeeping)\b'; then
-          echo "✅ Changelog validation passed"
+          echo "Changelog validation passed"
         else
-          echo "❌ PR description must include a changelog entry with a category: feature, enhancement, bugfix, or housekeeping"
+          echo "PR description must include a changelog entry with a category: feature, enhancement, bugfix, or housekeeping"
           echo ""
           echo "Example: 'enhancement - Bump docker version to x.x.x'"
           exit 1
