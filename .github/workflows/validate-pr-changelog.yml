@@ -19,8 +19,8 @@ jobs:
           exit 0
         fi
 
-        # Extract text between "Description for the changelog" and "Licensing"
-        changelog=$(echo "$PR_BODY" | sed -n '/### Description for the changelog/,/### Licensing/p')
+        # Extract text between "Description for the changelog" and "Licensing", strip HTML comments
+        changelog=$(echo "$PR_BODY" | sed -n '/### Description for the changelog/,/### Licensing/p' | sed '/<!--/,/-->/d')
 
         if [ -z "$changelog" ]; then
           echo "::error::No 'Description for the changelog' section found in PR description."
