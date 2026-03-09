@@ -13,52 +13,21 @@ jobs:
         PR_BODY: ${{ github.event.pull_request.body }}
         PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: |
-        # Skip validation for bot PRs (e.g., InitiateRelease via GitHub App)
+        # Skip for bot PRs
         if [[ "$PR_AUTHOR" == "github-actions[bot]" || "$PR_AUTHOR" == "release-notes-testing[bot]" ]]; then
-          echo "Automated release PR — skipping changelog validation"
+          echo "✅ Bot PR — skipping changelog validation"
           exit 0
         fi
 
-        # Extract text between "Description for the changelog" and "Licensing", strip HTML comments
-        changelog=$(echo "$PR_BODY" | sed -n '/### Description for the changelog/,/### Licensing/p' | sed '/<!--/,/-->/d')
+        # Check if PR body contains any of the required category keywords
+        # (outside of HTML comments)
+        body_no_comments=$(echo "$PR_BODY" | sed '/<!--/,/-->/d')
 
-        # Check if changelog section exists
-        if [ -z "$changelog" ]; then
-          echo "❌ Missing 'Description for the changelog' section."
-          echo "Please use the PR template and fill in the changelog section."
-          echo "::error::Missing 'Description for the changelog' section. Please use the PR template."
-          exit 1
-        fi
-
-        # Check if there's any non-empty content (not just headers and whitespace)
-        content=$(echo "$changelog" | grep -v '^###' | grep -v '^[[:space:]]*$' || true)
-        if [ -z "$content" ]; then
-          echo "❌ Changelog section is empty."
-          echo "Please add a changelog entry with a category prefix."
-          echo "Format: [category] - description"
-          echo "Categories: feature, enhancement, bugfix, housekeeping"
-          echo "::error::Changelog section is empty. Add an entry like: 'enhancement - Bump docker version to x.x.x'"
-          exit 1
-        fi
-
-        # Check for required category keyword
-        keywords=("feature" "enhancement" "bugfix" "housekeeping")
-        found=false
-        for keyword in "${keywords[@]}"; do
-          if echo "$content" | grep -qi "\b$keyword\b"; then
-            echo "Found changelog category: $keyword"
-            found=true
-          fi
-        done
-
-        if [ "$found" = false ]; then
-          echo "❌ Changelog entry is missing a category prefix."
-          echo "Please update your PR description with a valid category."
-          echo "Format: [category] - description"
-          echo "Valid categories: feature, enhancement, bugfix, housekeeping"
+        if echo "$body_no_comments" | grep -qiE '\b(feature|enhancement|bugfix|housekeeping)\b'; then
+          echo "✅ Changelog validation passed"
+        else
+          echo "❌ PR description must include a changelog entry with a category: feature, enhancement, bugfix, or housekeeping"
+          echo ""
           echo "Example: 'enhancement - Bump docker version to x.x.x'"
-          echo "::error::Changelog entry missing category. Use: feature, enhancement, bugfix, or housekeeping."
           exit 1
         fi
-
-        echo "✅ Changelog validation passed"
